@@ -215,7 +215,7 @@ class VideoProcessor():
         chunkData = None
         error = None
 
-        chunkFileName = "tempChunks/stream_%d_chunk_%s" % (streamer_id, chunk_id)
+        chunkFileName = "tempChunks/stream_%d_chunk_%s.ts" % (streamer_id, chunk_id)
         if os.path.isfile(chunkFileName):
             with open(chunkFileName, 'rb') as tempFile:
                 chunkData = tempFile.read()
@@ -271,10 +271,13 @@ class OriginServicer(origin_pb2_grpc.OriginServicer):
             else:
                 tempError = ""
                 chunkData = servicerResponse["chunk_data"]
+
             yield origin_pb2.fetch_chunk_response(
-                success,
-                tempError,
-                chunkData
+                success= success,
+                error= tempError,
+                chunk_data= chunkData,
+                chunk_id= request.chunk_id,
+                streamer_id= request.streamer_id
             )
 
 

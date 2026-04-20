@@ -91,4 +91,6 @@ message fetch_chunk_response {
     bool success = 1;
     string error = 2;
     bytes chunk_data = 3;
+    int32 chunk_id = 4;
+    int32 streamer_id = 5;
 }

@@ -53,6 +53,23 @@ def generateMsgs():
 
 
 
+
+def fetchMsgs():
+
+    fetchMsgs = []
+    testMsgsToFetch = [3,4,5,6,9]
+
+    for chunkToFetch in testMsgsToFetch:
+        fetchMsgs.append(origin_pb2.fetch_chunk_request(
+            streamer_id= 1,
+            chunk_id= chunkToFetch
+        ))
+
+    for request in fetchMsgs:
+        yield request
+
+
+
 def main():
 
     originChannel = grpc.insecure_channel("%s:%s" % (ORIGIN_IP, ORIGIN_PORT),
@@ -65,10 +82,26 @@ def main():
 
     originStub = origin_pb2_grpc.OriginStub(originChannel)
 
-    originResponses = originStub.ingest_video_rpc(generateMsgs())
+    # originResponses = originStub.ingest_video_rpc(generateMsgs())
+    # for originResponse in originResponses:
+    #     print("Origin Response: %s" % originResponse)    
 
+
+    #Now test the request RPC
+
+    originResponses = originStub.fetch_chunk_rpc(fetchMsgs())
     for originResponse in originResponses:
-        print("Origin Response: %s" % originResponse)    
+        #Save / play the received chunks
+
+        fetchedChunkData = originResponse.chunk_data
+        fetchedChunkID = originResponse.chunk_id
+        fetchedStreamerID = originResponse.streamer_id
+
+        with open("tempFetched/fetched%d_%d.ts" % (int(fetchedStreamerID), int(fetchedChunkID)), 'wb') as tempFile:
+            tempFile.write(fetchedChunkData)
+        
+        #ffmpeg -y -i fetched1_3.ts -c:v libx264 -c:a aac -b:v 3M -b:a 48k -filter:v fps=30 -vf scale=-2:480 test3.mp4
+
         
 
 

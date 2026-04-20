@@ -95,11 +95,15 @@ class fetch_chunk_request(_message.Message):
     def __init__(self, streamer_id: _Optional[int] = ..., chunk_id: _Optional[int] = ...) -> None: ...
 
 class fetch_chunk_response(_message.Message):
-    __slots__ = ("success", "error", "chunk_data")
+    __slots__ = ("success", "error", "chunk_data", "chunk_id", "streamer_id")
     SUCCESS_FIELD_NUMBER: _ClassVar[int]
     ERROR_FIELD_NUMBER: _ClassVar[int]
     CHUNK_DATA_FIELD_NUMBER: _ClassVar[int]
+    CHUNK_ID_FIELD_NUMBER: _ClassVar[int]
+    STREAMER_ID_FIELD_NUMBER: _ClassVar[int]
     success: bool
     error: str
     chunk_data: bytes
-    def __init__(self, success: bool = ..., error: _Optional[str] = ..., chunk_data: _Optional[bytes] = ...) -> None: ...
+    chunk_id: int
+    streamer_id: int
+    def __init__(self, success: bool = ..., error: _Optional[str] = ..., chunk_data: _Optional[bytes] = ..., chunk_id: _Optional[int] = ..., streamer_id: _Optional[int] = ...) -> None: ...
