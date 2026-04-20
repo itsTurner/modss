@@ -35,7 +35,7 @@ enum FrameRate {
 
 enum Format {
     MP4 = 0;
-    HPS = 1;
+    HLS = 1;
 }
 
 
@@ -66,17 +66,20 @@ service Origin {
 message ingest_video_request {
     int32 streamer_id = 1;
     Format video_format = 2; 
-    Codec video_codec = 3; //Compression type
-    bytes video_data = 4;   //Max is 4MB by default, configurable though
-    bool enable_ml_censorship = 5; //Example flag that can be set by streamer
-    Resolution video_res = 6; //1080, 720, 480, 360, or 240
-    FrameRate frame_rate = 7; //30, 60fps
-    int32 video_bitrate_mbps = 8;
-    int32 audio_bitrate_kbps = 9;
+    VideoCodec video_codec = 3; //Compression type
+    AudioCodec audio_codec = 4;
+    bytes video_data = 5;   //Max is 4MB by default, configurable though
+    bool enable_ml_censorship = 6; //Example flag that can be set by streamer
+    bool enable_watermark = 7;
+    Resolution video_res = 8; //1080, 720, 480, 360, or 240
+    FrameRate frame_rate = 9; //30, 60fps
+    int32 video_bitrate_mbps = 10;
+    int32 audio_bitrate_kbps = 11;
 }
 
 message ingest_video_response {
     bool success = 1;
+    string error = 2;
 }
 
 message fetch_chunk_request {

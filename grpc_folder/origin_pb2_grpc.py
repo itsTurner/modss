@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-import grpc_folder.origin_pb2 as origin__pb2
+import origin_pb2 as origin__pb2
 
 GRPC_GENERATED_VERSION = '1.78.0'
 GRPC_VERSION = grpc.__version__
@@ -39,6 +39,11 @@ class OriginStub(object):
                 request_serializer=origin__pb2.ingest_video_request.SerializeToString,
                 response_deserializer=origin__pb2.ingest_video_response.FromString,
                 _registered_method=True)
+        self.fetch_chunk_rpc = channel.stream_stream(
+                '/origin.Origin/fetch_chunk_rpc',
+                request_serializer=origin__pb2.fetch_chunk_request.SerializeToString,
+                response_deserializer=origin__pb2.fetch_chunk_response.FromString,
+                _registered_method=True)
 
 
 class OriginServicer(object):
@@ -51,6 +56,21 @@ class OriginServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def fetch_chunk_rpc(self, request_iterator, context):
+        """Should I return a stream of ACKs to the PoP?
+        Like ACK each message? Or wait until a threshold is met to ACK multiple?
+        Probably a stream of ACKs TBH
+
+        "The two streams operate independently"
+        Clients and servers can read and write in whatever order they like
+        Can read one the write one
+        The order of messages in each stream is preserved
+
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_OriginServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -58,6 +78,11 @@ def add_OriginServicer_to_server(servicer, server):
                     servicer.ingest_video_rpc,
                     request_deserializer=origin__pb2.ingest_video_request.FromString,
                     response_serializer=origin__pb2.ingest_video_response.SerializeToString,
+            ),
+            'fetch_chunk_rpc': grpc.stream_stream_rpc_method_handler(
+                    servicer.fetch_chunk_rpc,
+                    request_deserializer=origin__pb2.fetch_chunk_request.FromString,
+                    response_serializer=origin__pb2.fetch_chunk_response.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -87,6 +112,33 @@ class Origin(object):
             '/origin.Origin/ingest_video_rpc',
             origin__pb2.ingest_video_request.SerializeToString,
             origin__pb2.ingest_video_response.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def fetch_chunk_rpc(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_stream(
+            request_iterator,
+            target,
+            '/origin.Origin/fetch_chunk_rpc',
+            origin__pb2.fetch_chunk_request.SerializeToString,
+            origin__pb2.fetch_chunk_response.FromString,
             options,
             channel_credentials,
             insecure,

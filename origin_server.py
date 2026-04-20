@@ -23,8 +23,13 @@ import grpc_folder.origin_pb2_grpc as origin_pb2_grpc
 MAX_WORKER_THREADS = 10 
 BATCH_DURATION = 5 #5 seconds
 
+MAX_MESSAGE_LENGTH = 8388608
+
 
 class VideoProcessor():
+
+    def __init__(self):
+        self.streamerNumChunks = {}
 
 
     def cleanupOldChunks(self):
@@ -36,6 +41,12 @@ class VideoProcessor():
             #If so, delete file
             #If not, ignore
 
+        # while(1):
+        #     pass
+            #How to check last access time.....
+            #Wall clock time probably
+            #***********8
+
 
 
     def transcodeHLS(self, streamer_id, video_data, video_codec, video_res, frame_rate, audio_codec, video_bitrate_mbps, audio_bitrate_kbps):
@@ -44,50 +55,59 @@ class VideoProcessor():
 
         #Setup the codec param for ffmpeg
         if video_codec == "H264":
-            mpegVideoCodec = "-c:v libx264"
+            mpegVideoCodec = "libx264"
         elif video_codec == "H265":
-            mpegVideoCodec = "-c:v libx265"
+            mpegVideoCodec = "libx265"
         elif video_codec == "VP8":
-            mpegVideoCodec = "-c:v libvpx"
+            mpegVideoCodec = "libvpx"
         elif video_codec == "VP9":
-            mpegVideoCodec = "-c:v libvpx-vp9"
+            mpegVideoCodec = "libvpx-vp9"
 
         #Setup the resolution param for ffmpeg
         if video_res == "p1080":
             #ffmpeg auto calculates the width when the width is negative.
             #'-2' makes it work with the default H264 codec (makes sure it's an even number calculated)
-            mpegRes = "-vf scale=-2:1080" 
+            mpegRes = "scale=-2:1080" 
         elif video_res == "p720":
-            mpegRes = "-vf scale=-2:720"
+            mpegRes = "scale=-2:720"
         elif video_res == "p480":
-            mpegRes = "-vf scale=-2:480"
+            mpegRes = "scale=-2:480"
         elif video_res == "p360":
-            mpegRes = "-vf scale=-2:360"
+            mpegRes = "scale=-2:360"
         elif video_res == "p240":
-            mpegRes = "-vf scale=-2:240"
+            mpegRes = "scale=-2:240"
 
 
         if frame_rate == "fps30":
-            mpegFR = "-filter:v fps=30"
+            mpegFR = "fps=30"
         elif frame_rate == "fps60":
-            mpegFR = "-filter:v fps=60"
+            mpegFR = "fps=60"
 
         
         if audio_codec == "AAC":
-            mpegAudioCodec = "-c:a aac"
+            mpegAudioCodec = "aac"
         elif audio_codec == "MP3":
-            mpegAudioCodec = "-c:a libmp3lame"
+            mpegAudioCodec = "libmp3lame"
 
 
-        mpegVideoBR = "-b:v %dM" % (video_bitrate_mbps)
-        mpegAudioBR = "-b:a %dk" % (audio_bitrate_kbps)
+        mpegVideoBR = "%dM" % (video_bitrate_mbps)
+        mpegAudioBR = "%dk" % (audio_bitrate_kbps)
 
         #Store the initial input file (pre-processing) to a temporary file
         tempInputFile = "HLSTranscodeInput_%s.ts" % (streamer_id)
         with open(tempInputFile, "wb") as tempFile:
             tempFile.write(video_data)
 
-        tempOutputFile = "HLSTranscodeOutput_%s.ts" % (streamer_id)
+
+        # tempOutputFile = "HLSTranscodeOutput_%s.ts" % (streamer_id)
+        if streamer_id not in self.streamerNumChunks:
+            self.streamerNumChunks[streamer_id] = 1
+        else:
+            self.streamerNumChunks[streamer_id] += 1
+
+        chunkFileName = "tempChunks/stream_%d_chunk_%d.ts" % (streamer_id, self.streamerNumChunks[streamer_id])
+        with open(chunkFileName, 'wb') as tempFile:
+            tempFile.write(b"")
 
         subprocess.run(
             [
@@ -96,19 +116,25 @@ class VideoProcessor():
                 "-i",
                 tempInputFile,
                 #Transcoding options
+                "-c:v",
                 mpegVideoCodec,
+                "-c:a",
                 mpegAudioCodec,
+                "-b:v",
                 mpegVideoBR,
+                "-b:a",
                 mpegAudioBR,
-                mpegRes,
+                "-filter:v",
                 mpegFR,
+                "-vf",
+                mpegRes,
                 #Output file
-                tempOutputFile
+                chunkFileName
             ]
         )
         #Get output to send on to the next node in the network
         transcodedDataOut = None
-        with open(tempOutputFile, "rb") as tempFile:
+        with open(chunkFileName, "rb") as tempFile:
             transcodedDataOut = tempFile.read()
 
         return transcodedDataOut
@@ -170,6 +196,8 @@ class VideoProcessor():
                 audio_codec, 
                 video_bitrate_mbps, 
                 audio_bitrate_kbps)
+            
+            status = True #***Temp fix, add error handling later
 
         if (enable_ml_censorship):
             outputChunk = self.mlCensorship(outputChunk)
@@ -177,7 +205,7 @@ class VideoProcessor():
         if (enable_watermark):
             outputChunk = self.watermarkProcessing(outputChunk)
 
-        return status
+        return { "success" : status}
     
 
     def fetch_chunk(self, streamer_id: int, chunk_id: int):
@@ -187,13 +215,13 @@ class VideoProcessor():
         chunkData = None
         error = None
 
-        chunkFileName = "buffer_%d_chunk_%s" % (streamer_id, chunk_id)
+        chunkFileName = "tempChunks/stream_%d_chunk_%s" % (streamer_id, chunk_id)
         if os.path.isfile(chunkFileName):
             with open(chunkFileName, 'rb') as tempFile:
                 chunkData = tempFile.read()
-            return { "success" : False, "chunk_data" : chunkData }
+            return { "success" : True, "chunk_data" : chunkData }
         else:
-            error = "Chunk not found"
+            error = "Chunk %d not found for streamer_id %d" % (chunk_id, streamer_id)
             return { "success" : False, "error" : error }
         
         
@@ -211,17 +239,23 @@ class OriginServicer(origin_pb2_grpc.OriginServicer):
                 request.streamer_id,
                 request.video_format,
                 request.video_codec,
+                request.audio_codec,
                 request.video_data,
                 request.enable_ml_censorship,
+                request.enable_watermark,
                 request.video_res,
-                request.frame_rate
+                request.frame_rate,
+                request.video_bitrate_mbps,
+                request.audio_bitrate_kbps
             )
+            success = bool(servicerResponse["success"])
             if("error" in servicerResponse):
-                tempError = servicerResponse["error"]
+                tempError = str(servicerResponse["error"])
             else:
                 tempError = ""
             yield origin_pb2.ingest_video_response(
-                success = bool(servicerResponse["success"])
+                success= success,
+                error= tempError
             )
 
     def fetch_chunk_rpc(self, requests, context):
@@ -230,14 +264,13 @@ class OriginServicer(origin_pb2_grpc.OriginServicer):
                 request.streamer_id,
                 request.chunk_id
             )
+            success = bool(servicerResponse["success"])
             if("error" in servicerResponse):
                 tempError = str(servicerResponse["error"])
                 chunkData = ""
-                success = False
             else:
                 tempError = ""
                 chunkData = servicerResponse["chunk_data"]
-                success = True
             yield origin_pb2.fetch_chunk_response(
                 success,
                 tempError,
@@ -246,20 +279,20 @@ class OriginServicer(origin_pb2_grpc.OriginServicer):
 
 
 
-def tempCleanup():
+# def tempCleanup():
 
-    streamerBufferFile = "buffer_1.ts"
-    remainderBufferFile = "buffer_cut1.ts" #For remainders after 5 seconds are cut out
-    fiveSecBufferFile = "fivesecbuffer_1.ts"
+#     streamerBufferFile = "buffer_1.ts"
+#     remainderBufferFile = "buffer_cut1.ts" #For remainders after 5 seconds are cut out
+#     fiveSecBufferFile = "fivesecbuffer_1.ts"
 
-    with open(streamerBufferFile, 'w') as tempFile:
-            tempFile.write("")
+#     with open(streamerBufferFile, 'w') as tempFile:
+#             tempFile.write("")
 
-    with open(remainderBufferFile, 'w') as tempFile:
-            tempFile.write("")
+#     with open(remainderBufferFile, 'w') as tempFile:
+#             tempFile.write("")
 
-    with open(fiveSecBufferFile, 'w') as tempFile:
-            tempFile.write("")
+#     with open(fiveSecBufferFile, 'w') as tempFile:
+#             tempFile.write("")
 
 
 
@@ -267,14 +300,20 @@ def tempCleanup():
 
 
 def main():
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers= MAX_WORKER_THREADS))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers= MAX_WORKER_THREADS),
+                                            options = [
+                                                ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+                                                ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH)      
+                                            ])
 
     videoProcessor = VideoProcessor()
 
-    tempCleanup()
+    # tempCleanup()
 
     origin_pb2_grpc.add_OriginServicer_to_server(OriginServicer(videoProcessor), server)
     server.add_insecure_port("[::]:9100") #TODO: Temporary, fix***************
+    
+    print("Origin Server Now Running")
     server.start() #Non-blocking
     server.wait_for_termination()
 
