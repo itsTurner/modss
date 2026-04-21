@@ -4,14 +4,11 @@ import grpc
 from concurrent import futures
 
 import subprocess
+import threading
 
-import av
-import ffmpeg
-from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
-from moviepy import * #Built on top of ffmpeg, works with basically any codec
 import os
 import time
-import hashlib
+import copy
 
 import sys
 sys.path.append("grpc_folder")
@@ -23,30 +20,39 @@ import grpc_folder.origin_pb2_grpc as origin_pb2_grpc
 MAX_WORKER_THREADS = 10 
 BATCH_DURATION = 5 #5 seconds
 
-MAX_MESSAGE_LENGTH = 8388608
+MAX_MESSAGE_LENGTH = 8388608 #Bytes (double the default)
 
 
 class VideoProcessor():
 
     def __init__(self):
         self.streamerNumChunks = {}
+        self.chunkAccessTimes = {}
+
+    def start(self):
+        cleanup_thread = threading.Thread(
+                        target=self.cleanupOldChunks,
+                        args=(),
+                        daemon=True
+                    )
+        cleanup_thread.start()
 
 
     def cleanupOldChunks(self):
-        pass
-        #This is the callback function for a thread
-        #Need to include a while loop here, sleep 1 second to reduce power usage
-        #Check all files
-        #Check if last access time for the chunk was > 10*BATCH_DURATION
-            #If so, delete file
-            #If not, ignore
+        while(1):
+            time.sleep(1) #Reduce power, resolution is per second so only check every second
 
-        # while(1):
-        #     pass
-            #How to check last access time.....
-            #Wall clock time probably
-            #***********8
+            tempCopyAccessTimes = copy.deepcopy(self.chunkAccessTimes)
+            #Keep a dictionary of file names and last access time. Be able to compare current time to access timestamp
+            for chunkFile in tempCopyAccessTimes:
+                currentTime = int(time.time())
+                if (currentTime - self.chunkAccessTimes[chunkFile]) >= 10 * BATCH_DURATION:
+                    
+                    if os.path.isfile(chunkFile):
+                        os.remove(chunkFile)
 
+                    self.chunkAccessTimes.pop(chunkFile)
+                
 
 
     def transcodeHLS(self, streamer_id, video_data, video_codec, video_res, frame_rate, audio_codec, video_bitrate_mbps, audio_bitrate_kbps):
@@ -132,6 +138,9 @@ class VideoProcessor():
                 chunkFileName
             ]
         )
+
+        self.chunkAccessTimes[chunkFileName] = int(time.time())
+
         #Get output to send on to the next node in the network
         transcodedDataOut = None
         with open(chunkFileName, "rb") as tempFile:
@@ -267,7 +276,7 @@ class OriginServicer(origin_pb2_grpc.OriginServicer):
             success = bool(servicerResponse["success"])
             if("error" in servicerResponse):
                 tempError = str(servicerResponse["error"])
-                chunkData = ""
+                chunkData = b""
             else:
                 tempError = ""
                 chunkData = servicerResponse["chunk_data"]
@@ -282,24 +291,6 @@ class OriginServicer(origin_pb2_grpc.OriginServicer):
 
 
 
-# def tempCleanup():
-
-#     streamerBufferFile = "buffer_1.ts"
-#     remainderBufferFile = "buffer_cut1.ts" #For remainders after 5 seconds are cut out
-#     fiveSecBufferFile = "fivesecbuffer_1.ts"
-
-#     with open(streamerBufferFile, 'w') as tempFile:
-#             tempFile.write("")
-
-#     with open(remainderBufferFile, 'w') as tempFile:
-#             tempFile.write("")
-
-#     with open(fiveSecBufferFile, 'w') as tempFile:
-#             tempFile.write("")
-
-
-
-
 
 
 def main():
@@ -310,8 +301,7 @@ def main():
                                             ])
 
     videoProcessor = VideoProcessor()
-
-    # tempCleanup()
+    videoProcessor.start()
 
     origin_pb2_grpc.add_OriginServicer_to_server(OriginServicer(videoProcessor), server)
     server.add_insecure_port("[::]:9100") #TODO: Temporary, fix***************

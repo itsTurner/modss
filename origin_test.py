@@ -82,9 +82,9 @@ def main():
 
     originStub = origin_pb2_grpc.OriginStub(originChannel)
 
-    # originResponses = originStub.ingest_video_rpc(generateMsgs())
-    # for originResponse in originResponses:
-    #     print("Origin Response: %s" % originResponse)    
+    originResponses = originStub.ingest_video_rpc(generateMsgs())
+    for originResponse in originResponses:
+        print("Origin Response: %s" % originResponse)    
 
 
     #Now test the request RPC
