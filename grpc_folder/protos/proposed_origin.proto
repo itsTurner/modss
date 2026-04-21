@@ -1,0 +1,166 @@
+syntax = "proto3";
+
+package modss;
+
+option go_package = "github.com/itsTurner/modss/proto";
+
+enum Format {
+  HLS = 0;
+  MP4 = 1;
+}
+
+enum VideoCodec {
+  H264 = 0;
+  H265 = 1;
+  VP8  = 2;
+  VP9  = 3;
+}
+
+enum AudioCodec {
+  AAC = 0;
+  MP3 = 1;
+}
+
+enum Resolution {
+  p1080 = 0;
+  p720  = 1;
+  p480  = 2;
+  p360  = 3;
+  p240  = 4;
+}
+
+enum FrameRate {
+  fps30 = 0;
+  fps60 = 1;
+}
+
+service Origin {
+  // PoP → Origin: push a video chunk for processing
+  rpc ingest_video_rpc(stream ingest_video_request) returns (stream ingest_video_response);
+  // PoP → Origin: pull a processed chunk to serve a viewer
+  rpc fetch_chunk_rpc(stream fetch_chunk_request)   returns (stream fetch_chunk_response);
+}
+
+message ingest_video_request {
+  int32      streamer_id          = 1;
+  Format     video_format         = 2;
+  VideoCodec video_codec          = 3;
+  AudioCodec audio_codec          = 4;
+  bytes      video_data           = 5;
+  bool       enable_ml_censorship = 6;
+  bool       enable_watermark     = 7;
+  Resolution video_res            = 8;
+  FrameRate  frame_rate           = 9;
+  int32      video_bitrate_mbps   = 10;
+  int32      audio_bitrate_kbps   = 11;
+  // Routing metadata added by Go PoP
+  string     job_id               = 12;
+  repeated string completed_stages = 13;
+}
+
+message ingest_video_response {
+  bool   success = 1;
+  string error   = 2;
+  string job_id  = 3;
+}
+
+message fetch_chunk_request {
+  int32  streamer_id = 1;
+  int32  chunk_id    = 2;
+}
+
+message fetch_chunk_response {
+  bool   success    = 1;
+  string error      = 2;
+  bytes  chunk_data = 3;
+  int32  chunk_id   = 4;
+  int32  streamer_id = 5;
+}
+
+service Routing {
+  // PoP registers a new stream and receives an origin assignment
+  rpc RegisterStream(RegisterStreamRequest)   returns (RegisterStreamResponse);
+  // PoP refreshes routing when congestion is detected
+  rpc RefreshRoute(RefreshRouteRequest)        returns (RegisterStreamResponse);
+  // Origin reports job completion
+  rpc JobComplete(JobCompleteRequest)          returns (JobCompleteResponse);
+  // PoP requests the origin that holds a specific chunk for a viewer
+  rpc GetChunkLocation(ChunkLocationRequest)   returns (ChunkLocationResponse);
+  // Health / heartbeat from origin servers
+  rpc OriginHeartbeat(OriginHeartbeatRequest)  returns (OriginHeartbeatResponse);
+}
+
+message StreamConfig {
+  int32      streamer_id          = 1;
+  string     stream_key           = 2;
+  Format     video_format         = 3;
+  VideoCodec video_codec          = 4;
+  AudioCodec audio_codec          = 5;
+  Resolution video_res            = 6;
+  FrameRate  frame_rate           = 7;
+  int32      video_bitrate_mbps   = 8;
+  int32      audio_bitrate_kbps   = 9;
+  bool       enable_ml_censorship = 10;
+  bool       enable_watermark     = 11;
+}
+
+message OriginRef {
+  string origin_id  = 1;
+  string address    = 2;  // host:port
+}
+
+message RegisterStreamRequest {
+  StreamConfig config    = 1;
+  string       pop_id    = 2;
+  string       pop_region = 3;
+}
+
+message RegisterStreamResponse {
+  bool              success          = 1;
+  string            error            = 2;
+  repeated OriginRef origins         = 3;   // ordered preference list
+  int32             ttl_seconds      = 4;   // how long before PoP should re-register
+}
+
+message RefreshRouteRequest {
+  int32  streamer_id = 1;
+  string pop_id      = 2;
+  string reason      = 3;  // e.g. "congestion", "origin_down"
+}
+
+message JobCompleteRequest {
+  string origin_id   = 1;
+  string job_id      = 2;
+  int32  streamer_id = 3;
+  int32  chunk_id    = 4;
+  bool   success     = 5;
+  int64  duration_ms = 6;  // completion time for load-balancing window
+}
+
+message JobCompleteResponse {
+  bool success = 1;
+}
+
+message ChunkLocationRequest {
+  int32  streamer_id = 1;
+  int32  chunk_id    = 2;
+  string pop_id      = 3;
+}
+
+message ChunkLocationResponse {
+  bool   success   = 1;
+  string error     = 2;
+  OriginRef origin = 3;
+}
+
+message OriginHeartbeatRequest {
+  string origin_id         = 1;
+  string address           = 2;
+  float  cpu_utilization   = 3;  // 0.0 – 1.0
+  int32  active_streams    = 4;
+  int64  timestamp_unix    = 5;
+}
+
+message OriginHeartbeatResponse {
+  bool success = 1;
+}
