@@ -35,6 +35,7 @@ class Format(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     __slots__ = ()
     MP4: _ClassVar[Format]
     HLS: _ClassVar[Format]
+    FLV: _ClassVar[Format]
 H264: VideoCodec
 H265: VideoCodec
 VP8: VideoCodec
@@ -51,6 +52,7 @@ fps30: FrameRate
 fps60: FrameRate
 MP4: Format
 HLS: Format
+FLV: Format
 
 class ingest_video_request(_message.Message):
     __slots__ = ("streamer_id", "video_format", "video_codec", "audio_codec", "video_data", "enable_ml_censorship", "enable_watermark", "video_res", "frame_rate", "video_bitrate_mbps", "audio_bitrate_kbps")

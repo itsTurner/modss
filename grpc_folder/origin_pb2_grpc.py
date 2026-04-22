@@ -50,22 +50,14 @@ class OriginServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def ingest_video_rpc(self, request_iterator, context):
-        """PoP to Origin RPCs
+        """PoP to Origin RPC
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def fetch_chunk_rpc(self, request_iterator, context):
-        """Should I return a stream of ACKs to the PoP?
-        Like ACK each message? Or wait until a threshold is met to ACK multiple?
-        Probably a stream of ACKs TBH
-
-        "The two streams operate independently"
-        Clients and servers can read and write in whatever order they like
-        Can read one the write one
-        The order of messages in each stream is preserved
-
+        """Origin to PoP RPC
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')

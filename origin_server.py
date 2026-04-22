@@ -54,6 +54,98 @@ class VideoProcessor():
                     self.chunkAccessTimes.pop(chunkFile)
                 
 
+    def transcodeFLV(self, streamer_id, video_data, video_codec, video_res, frame_rate, audio_codec, video_bitrate_mbps, audio_bitrate_kbps):
+        #Setup the codec param for ffmpeg
+        if video_codec == "H264":
+            mpegVideoCodec = "libx264"
+        elif video_codec == "H265":
+            mpegVideoCodec = "libx265"
+        elif video_codec == "VP8":
+            mpegVideoCodec = "libvpx"
+        elif video_codec == "VP9":
+            mpegVideoCodec = "libvpx-vp9"
+
+        #Setup the resolution param for ffmpeg
+        if video_res == "p1080":
+            #ffmpeg auto calculates the width when the width is negative.
+            #'-2' makes it work with the default H264 codec (makes sure it's an even number calculated)
+            mpegRes = "scale=-2:1080" 
+        elif video_res == "p720":
+            mpegRes = "scale=-2:720"
+        elif video_res == "p480":
+            mpegRes = "scale=-2:480"
+        elif video_res == "p360":
+            mpegRes = "scale=-2:360"
+        elif video_res == "p240":
+            mpegRes = "scale=-2:240"
+
+
+        if frame_rate == "fps30":
+            mpegFR = "fps=30"
+        elif frame_rate == "fps60":
+            mpegFR = "fps=60"
+
+        
+        if audio_codec == "AAC":
+            mpegAudioCodec = "aac"
+        elif audio_codec == "MP3":
+            mpegAudioCodec = "libmp3lame"
+
+
+        mpegVideoBR = "%dM" % (video_bitrate_mbps)
+        mpegAudioBR = "%dk" % (audio_bitrate_kbps)
+
+        #Store the initial input file (pre-processing) to a temporary file
+        tempInputFile = "FLVTranscodeInput_%s.flv" % (streamer_id)
+        with open(tempInputFile, "wb") as tempFile:
+            tempFile.write(video_data)
+
+
+        # tempOutputFile = "HLSTranscodeOutput_%s.ts" % (streamer_id)
+        if streamer_id not in self.streamerNumChunks:
+            self.streamerNumChunks[streamer_id] = 1
+        else:
+            self.streamerNumChunks[streamer_id] += 1
+
+        chunkFileName = "tempChunks/stream_%d_chunk_%d.ts" % (streamer_id, self.streamerNumChunks[streamer_id])
+        with open(chunkFileName, 'wb') as tempFile:
+            tempFile.write(b"")
+
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y", #Automatically say yes to overwrites
+                "-i",
+                tempInputFile,
+                #Transcoding options
+                "-c:v",
+                mpegVideoCodec,
+                "-c:a",
+                mpegAudioCodec,
+                "-b:v",
+                mpegVideoBR,
+                "-b:a",
+                mpegAudioBR,
+                "-filter:v",
+                mpegFR,
+                "-vf",
+                mpegRes,
+                #Output file
+                chunkFileName
+            ]
+        )
+
+        self.chunkAccessTimes[chunkFileName] = int(time.time())
+
+        #Get output to send on to the next node in the network
+        transcodedDataOut = None
+        with open(chunkFileName, "rb") as tempFile:
+            transcodedDataOut = tempFile.read()
+
+        return transcodedDataOut
+    
+
+
 
     def transcodeHLS(self, streamer_id, video_data, video_codec, video_res, frame_rate, audio_codec, video_bitrate_mbps, audio_bitrate_kbps):
         #Use the params passed in to do different ffmpeg operations on the data.
@@ -188,13 +280,8 @@ class VideoProcessor():
         video_res = origin_pb2.Resolution.Name(video_res)
         frame_rate = origin_pb2.FrameRate.Name(frame_rate)
 
-        #Batch into 5 sec clips first, then do additional processing as needed.
-        if (video_format == "MP4"):
-            pass
-            status = None
-            outputChunk = None
 
-        elif (video_format == "HLS"):
+        if (video_format == "HLS"):
             #Need to use ffmpeg to convert to the desired codec, resolution, bitrate, and framerate
             outputChunk = self.transcodeHLS(
                 streamer_id, 
@@ -206,7 +293,23 @@ class VideoProcessor():
                 video_bitrate_mbps, 
                 audio_bitrate_kbps)
             
-            status = True #***Temp fix, add error handling later
+            if outputChunk:
+                status = True
+            else:
+                status = False
+
+        elif (video_format == "FLV"):
+            outputChunk = self.transcodeFLV(
+                streamer_id, 
+                video_data, 
+                video_codec, 
+                video_res, 
+                frame_rate, 
+                audio_codec, 
+                video_bitrate_mbps, 
+                audio_bitrate_kbps)
+
+
 
         if (enable_ml_censorship):
             outputChunk = self.mlCensorship(outputChunk)

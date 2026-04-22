@@ -36,30 +36,19 @@ enum FrameRate {
 enum Format {
     MP4 = 0;
     HLS = 1;
+    FLV = 2;
 }
 
 
 service Origin {
 
-    //PoP to Origin RPCs
+    //PoP to Origin RPC
     rpc ingest_video_rpc (stream ingest_video_request)   returns (stream ingest_video_response) {}
-
-    //Should I return a stream of ACKs to the PoP?
-    //Like ACK each message? Or wait until a threshold is met to ACK multiple?
-    //Probably a stream of ACKs TBH
-
-        //"The two streams operate independently"
-        //Clients and servers can read and write in whatever order they like
-        //Can read one the write one
-        //The order of messages in each stream is preserved
-
-
+    //Origin to PoP RPC
     rpc fetch_chunk_rpc (stream fetch_chunk_request) returns (stream fetch_chunk_response) {}
 
 }
 
-//Origin does video transcoding, so maybe string indicating video protocol type received?
-//SRT for client to PoP
 
 //PoP to Origin
 //Format of "video_data" param is a buffer of byes in the specified format
